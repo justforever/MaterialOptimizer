@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>AI 智能裁切最佳化工具</title>
+    <style>
+        :root { --primary: #2563eb; --bg: #f8fafc; --text: #1e293b; }
+        body { font-family: -apple-system, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; line-height: 1.6; }
+        .container { max-width: 900px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+        h2 { color: var(--primary); margin-top: 0; }
+        .input-group { margin-bottom: 20px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; }
+        textarea, input { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        button { background: var(--primary); color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 16px; font-weight: bold; width: 100%; transition: opacity 0.2s; }
+        button:hover { opacity: 0.9; }
+        
+        .result-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin: 20px 0; }
+        .stat-card { background: #eff6ff; padding: 15px; border-radius: 8px; text-align: center; border: 1px solid #bfdbfe; }
+        .stat-value { font-size: 24px; font-weight: bold; color: var(--primary); }
+        
+        .bin-item { margin-bottom: 15px; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; }
+        .bin-info { display: flex; justify-content: space-between; margin-bottom: 8px; font-weight: bold; }
+        .progress-container { height: 30px; background: #e2e8f0; border-radius: 15px; overflow: hidden; display: flex; }
+        .segment { height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; border-right: 1px solid rgba(255,255,255,0.3); transition: width 0.5s ease; }
+        .waste { background: #94a3b8 !important; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🛠️ AI 智能裁切最佳化計算器</h2>
+    
+    <div class="input-group">
+        <label>需求長度 (請以逗號或空格分隔):</label>
+        <textarea id="demandsInput" rows="4">1.1, 1.1, 1.1, 1.1, 1.43, 1.53, 1.7, 1.7, 1.7, 2.15, 2.3, 2.3, 2.3, 2.3, 2.45, 3.2, 3.3, 3.3, 3.6, 3.6, 3.8, 3.8, 3.802, 3.802, 4.08, 4.08, 4.22, 4.22, 4.22, 4.97, 5.18, 5.2, 5.3, 5.5, 5.62, 5.95, 6.05</textarea>
+    </div>
+
+    <div class="input-group">
+        <label>定尺規格 (請以逗號分隔):</label>
+        <input type="text" id="stocksInput" value="9, 10, 11, 12, 13, 14">
+    </div>
+
+    <button onclick="calculate()">開始計算最佳排版</button>
+
+    <div id="resultsArea" style="display:none;">
+        <div class="result-stats">
+            <div class="stat-card"><div>總使用支數</div><div class="stat-value" id="statBins">0</div></div>
+            <div class="stat-card"><div>平均利用率</div><div class="stat-value" id="statUtil">0%</div></div>
+            <div class="stat-card"><div>總廢料長度</div><div class="stat-value" id="statWaste">0</div></div>
+        </div>
+        <div id="binsList"></div>
+    </div>
+</div>
+
+<script>
+function calculate() {
+    // 1. 解析輸入
+    const demands = document.getElementById('demandsInput').value
+        .split(/[,\s]+/).map(Number).filter(n => n > 0).sort((a,b) => b-a);
+    const stocks = document.getElementById('stocksInput').value
+        .split(/[,\s]+/).map(Number).filter(n => n > 0).sort((a,b) => a-b);
+    
+    if(demands.length === 0) return alert("請輸入需求長度");
+
+    let remainingDemands = [...demands];
+    let results = [];
+    let totalStockLength = 0;
+    let totalUsedLength = demands.reduce((a, b) => a + b, 0);
+
+    // 2. 演算法邏輯 (填滿優先)
+    while (remainingDemands.length > 0) {
+        let bestStockSize = -1;
+        let bestCombination = [];
+        let minWaste = Infinity;
+
+        for (let size of stocks) {
+            if (size < remainingDemands[0]) continue;
+
+            let currentSum = remainingDemands[0];
+            let tempIndices = [0];
+            
+            for (let i = 1; i < remainingDemands.length; i++) {
+                if (currentSum + remainingDemands[i] <= size) {
+                    currentSum += remainingDemands[i];
+                    tempIndices.push(i);
+                }
+            }
+
+            let waste = size - currentSum;
+            if (waste < minWaste) {
+                minWaste = waste;
+                bestStockSize = size;
+                bestCombination = tempIndices;
+            }
+        }
+
+        if (bestCombination.length > 0) {
+            const items = bestCombination.map(idx => remainingDemands[idx]);
+            results.push({ size: bestStockSize, items: items, waste: minWaste });
+            totalStockLength += bestStockSize;
+            
+            // 移除已使用的需求
+            bestCombination.sort((a, b) => b - a).forEach(idx => remainingDemands.splice(idx, 1));
+        } else {
+            alert("錯誤：某個需求長度超過了所有可用規格！");
+            return;
+        }
+    }
+
+    renderResults(results, totalStockLength, totalUsedLength);
+}
+
+function renderResults(results, totalStock, totalUsed) {
+    document.getElementById('resultsArea').style.display = 'block';
+    document.getElementById('statBins').innerText = results.length;
+    document.getElementById('statWaste').innerText = (totalStock - totalUsed).toFixed(3);
+    document.getElementById('statUtil').innerText = ((totalUsed / totalStock) * 100).toFixed(1) + "%";
+
+    const list = document.getElementById('binsList');
+    list.innerHTML = '';
+
+    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4'];
+
+    results.forEach((bin, index) => {
+        const binEl = document.createElement('div');
+        binEl.className = 'bin-item';
+        
+        let segmentsHtml = '';
+        bin.items.forEach((item, i) => {
+            const width = (item / bin.size) * 100;
+            segmentsHtml += `<div class="segment" style="width: ${width}%; background: ${colors[i % colors.length]}">${item}</div>`;
+        });
+        
+        if(bin.waste > 0) {
+            segmentsHtml += `<div class="segment waste" style="width: ${(bin.waste / bin.size) * 100}%">剩 ${bin.waste.toFixed(2)}</div>`;
+        }
+
+        binEl.innerHTML = `
+            <div class="bin-info">
+                <span>#${index + 1} 規格: ${bin.size}m</span>
+                <span>利用率: ${(((bin.size - bin.waste) / bin.size) * 100).toFixed(1)}%</span>
+            </div>
+            <div class="progress-container">${segmentsHtml}</div>
+        `;
+        list.appendChild(binEl);
+    });
+}
+</script>
+</body>
+</html>
