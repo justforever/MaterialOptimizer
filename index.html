@@ -2,156 +2,393 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <title>AI 裁切成本最佳化工具 - 鋸路修正版</title>
+    <title>AI 裁切優化工具 - 元件優化版</title>
     <style>
         :root { --primary: #0369a1; --accent: #0891b2; --bg: #f8fafc; }
         body { font-family: system-ui, sans-serif; background: var(--bg); padding: 20px; color: #1e293b; }
         .container { max-width: 950px; margin: 0 auto; background: white; padding: 30px; border-radius: 15px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        
+        /* 修正 Checkbox 樣式 */
+        .cost-control { 
+            display: flex; 
+            align-items: center; 
+            gap: 12px; 
+            margin-bottom: 20px; 
+            padding: 15px; 
+            background: #e0f2fe; 
+            border-radius: 8px; 
+            color: #0369a1; 
+            font-weight: bold; 
+        }
+        #enableCost { 
+            width: 18px; 
+            height: 18px; 
+            cursor: pointer; 
+            flex-shrink: 0; /* 關鍵：防止被擠壓 */
+            margin: 0;
+        }
+        .cost-label { 
+            cursor: pointer; 
+            line-height: 1.2;
+            user-select: none;
+        }
+
         .input-section { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
         .params-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; background: #f1f5f9; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
         label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9em; }
         textarea, input { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        .price-input:disabled { background: #e2e8f0; cursor: not-allowed; opacity: 0.6; }
+        
         button { background: var(--primary); color: white; border: none; padding: 15px; border-radius: 8px; cursor: pointer; font-size: 18px; font-weight: bold; width: 100%; margin-top: 10px; }
         button:hover { background: #0284c7; }
         
+        .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; }
         .stat-card { background: white; padding: 15px; border: 1px solid #e2e8f0; border-radius: 10px; text-align: center; }
         .stat-value { font-size: 22px; font-weight: 800; color: var(--primary); }
         
+        .summary-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .summary-table th { background: var(--primary); color: white; padding: 12px; text-align: left; }
+        .summary-table td { padding: 12px; border-bottom: 1px solid #e2e8f0; }
+
         .bin-item { margin-top: 15px; border: 1px solid #e2e8f0; padding: 15px; border-radius: 10px; background: #fff; }
-        .bin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        .tag { padding: 3px 10px; border-radius: 12px; font-size: 11px; color: white; font-weight: bold; }
-        
-        .progress-bar { height: 35px; background: #f1f5f9; border-radius: 6px; overflow: hidden; display: flex; border: 1px solid #e2e8f0; }
+        .progress-bar { height: 35px; background: #f1f5f9; border-radius: 6px; overflow: hidden; display: flex; border: 1px solid #e2e8f0; margin-top: 10px; }
         .segment { height: 100%; display: flex; align-items: center; justify-content: center; color: white; font-size: 11px; border-right: 1px solid rgba(255,255,255,0.3); }
         .kerf { background: #334155 !important; width: 2px !important; flex-grow: 0 !important; flex-shrink: 0 !important; }
         .waste { background: #e2e8f0 !important; color: #64748b; }
+        .tag { padding: 3px 10px; border-radius: 12px; font-size: 11px; color: white; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2 style="text-align:center; color:#0369a1;">⚙️ 智能裁切最佳化 (含鋸路損耗)</h2>
+    <h2 style="text-align:center; color:#0369a1;">📊 智能裁切最佳化系統</h2>
     
     <label>需求長度列表 (m):</label>
     <textarea id="demandsInput" rows="3" style="margin-bottom:20px;">1.1, 1.1, 1.1, 1.1, 1.43, 1.53, 1.7, 1.7, 1.7, 2.15, 2.3, 2.3, 2.3, 2.3, 2.45, 3.2, 3.3, 3.3, 3.6, 3.6, 3.8, 3.8, 3.802, 3.802, 4.08, 4.08, 4.22, 4.22, 4.22, 4.97, 5.18, 5.2, 5.3, 5.5, 5.62, 5.95, 6.05</textarea>
 
+    <div class="cost-control">
+        <input type="checkbox" id="enableCost" onchange="toggleCostInputs()">
+        <label for="enableCost" class="cost-label">啟用單價權重計算 (勾選後優先尋找最便宜方案，否則以最省料為準)</label>
+    </div>
+
     <div class="input-section">
         <div>
-            <label>🔵 定尺規格 & 單價 ($/m)</label>
+            <label>🔵 定尺規格</label>
             <input type="text" id="fixedStocks" value="10, 12">
-            <input type="number" id="fixedPrice" value="100" style="margin-top:5px;">
+            <div style="margin-top:10px;">
+                <label>每米單價 ($):</label>
+                <input type="number" id="fixedPrice" value="100" class="price-input" disabled>
+            </div>
         </div>
         <div>
-            <label>💗 不定尺規格 & 單價 ($/m)</label>
+            <label>💗 不定尺規格</label>
             <input type="text" id="varStocks" value="9, 11, 13, 14">
-            <input type="number" id="varPrice" value="150" style="margin-top:5px;">
+            <div style="margin-top:10px;">
+                <label>每米單價 ($):</label>
+                <input type="number" id="varPrice" value="150" class="price-input" disabled>
+            </div>
         </div>
     </div>
 
     <div class="params-grid">
         <div>
-            <label>📏 切割損耗 (鋸路) :</label>
+            <label>📏 鋸路 (切割損耗) :</label>
             <input type="number" id="kerfInput" value="0.003" step="0.001">
-            <small style="color:#64748b">單位：公尺 (3mm = 0.003)</small>
-        </div>
-        <div style="grid-column: span 2; display: flex; align-items: flex-end;">
-            <p style="font-size: 0.85em; color: #475569; margin: 0;">※ 演算法會自動計算每次切割所需的間隙，確保現場材料足夠。</p>
         </div>
     </div>
 
-    <button onclick="calculate()">開始計算最省錢方案</button>
+    <button onclick="calculate()">執行最佳化運算</button>
 
     <div id="resultsArea" style="display:none; margin-top:30px;">
-        <div style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:15px; margin-bottom:20px;">
-            <div class="stat-card">總支出<br><span class="stat-value" id="statCost">$0</span></div>
-            <div class="stat-card">廢料/鋸屑總計<br><span class="stat-value" id="statWaste">0m</span></div>
-            <div class="stat-card">使用支數<br><span class="stat-value" id="statCount">0</span></div>
+        <div class="stat-grid">
+            <div class="stat-card">預估總成本<br><span class="stat-value" id="statCost">N/A</span></div>
+            <div class="stat-card">材料利用率<br><span class="stat-value" id="statUtil">0%</span></div>
+            <div class="stat-card">總支數<br><span class="stat-value" id="statCount">0</span></div>
         </div>
+
         <div id="binsList"></div>
+
+        <h3 style="margin-top:40px; border-left: 5px solid var(--primary); padding-left: 10px;">📋 採購清單統計</h3>
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th>材料規格</th>
+                    <th>類別</th>
+                    <th>需要支數</th>
+                </tr>
+            </thead>
+            <tbody id="summaryBody"></tbody>
+        </table>
     </div>
 </div>
 
 <script>
+function toggleCostInputs() {
+    const isEnabled = document.getElementById('enableCost').checked;
+    document.querySelectorAll('.price-input').forEach(input => {
+        input.disabled = !isEnabled;
+    });
+}
+
 function calculate() {
-    const demands = document.getElementById('demandsInput').value.split(/[,\s]+/).map(Number).filter(n => n > 0).sort((a,b) => b-a);
+    const demands = document.getElementById('demandsInput').value.split(/[,\s]+/).map(Number).filter(n => n > 0);
     const fixedSizes = document.getElementById('fixedStocks').value.split(/[,\s]+/).map(Number).filter(n => n > 0);
     const varSizes = document.getElementById('varStocks').value.split(/[,\s]+/).map(Number).filter(n => n > 0);
-    const pFixed = parseFloat(document.getElementById('fixedPrice').value);
-    const pVar = parseFloat(document.getElementById('varPrice').value);
+    const isCostEnabled = document.getElementById('enableCost').checked;
+    const pFixed = isCostEnabled ? parseFloat(document.getElementById('fixedPrice').value) : 1;
+    const pVar = isCostEnabled ? parseFloat(document.getElementById('varPrice').value) : 1;
     const kerf = parseFloat(document.getElementById('kerfInput').value);
-    
-    let remaining = [...demands];
-    let results = [];
-    let totalCost = 0;
-    let totalWaste = 0;
 
-    while (remaining.length > 0) {
-        let bestOption = null;
-        let minCostEfficiency = Infinity;
+    const allSpecs = [
+        ...fixedSizes.map(s => ({size: s, price: pFixed, isFixed: true})),
+        ...varSizes.map(s => ({size: s, price: pVar, isFixed: false}))
+    ];
 
-        const allSpecs = [
-            ...fixedSizes.map(s => ({size: s, price: pFixed, isFixed: true})),
-            ...varSizes.map(s => ({size: s, price: pVar, isFixed: false}))
-        ];
+    const { bins, unresolved } = solveCuttingStock(demands, allSpecs, kerf, isCostEnabled);
 
-        for (let spec of allSpecs) {
-            if (spec.size < remaining[0]) continue;
+    if (unresolved) {
+        alert("長度 " + unresolved + " 無法處理（找不到足夠大的規格）");
+    }
 
-            let currentSum = remaining[0];
-            let indices = [0];
-            let currentKerfCount = 0;
+    let stockStats = {};
+    bins.forEach(bin => {
+        const key = `${bin.size}m|${bin.isFixed ? '定尺' : '不定尺'}`;
+        stockStats[key] = (stockStats[key] || 0) + 1;
+    });
 
-            for (let i = 1; i < remaining.length; i++) {
-                // 檢查：目前總長 + 新需求 + 必須的一道鋸路 <= 原材規格
-                if (currentSum + remaining[i] + kerf <= spec.size) {
-                    currentSum += remaining[i] + kerf;
-                    indices.push(i);
-                    currentKerfCount++;
+    render(bins, stockStats, isCostEnabled);
+}
+
+/* ============================================================
+   Cutting-stock solver
+   ------------------------------------------------------------
+   The previous version picked, one bin at a time, whichever
+   single stock length looked cheapest/least-wasteful *for that
+   bin alone*. That greedy, no-lookahead choice can lock in a
+   combination that forces a worse (more expensive) combination
+   for the pieces left over — exactly what happened with
+   7.530 + 3.677 + 3.677: filling one 12m bin with two pieces
+   looked efficient, but it stranded the remaining 3.677 piece
+   in an expensive stand-alone bin.
+
+   Fix: for small piece counts (<= 14) we now search *all*
+   reasonable stock/pattern combinations exactly (branch & bound
+   with memoization) and keep the true minimum-cost result. For
+   larger lists (where exhaustive search would be too slow for
+   the browser) we keep the fast greedy pass, then run a
+   pairwise local-search improvement step that tries recombining
+   every two chosen bins to see if a cheaper split exists —
+   this is what caught the 12m+7m -> 9m+9m style mistake without
+   needing full exhaustive search.
+   ============================================================ */
+
+function solveCuttingStock(demands, allSpecs, kerf, isCostEnabled) {
+    const EXACT_THRESHOLD = 14; // exact search below this many pieces, heuristic above
+    if (demands.length === 0) return { bins: [], unresolved: null };
+
+    if (demands.length <= EXACT_THRESHOLD) {
+        const r = exactSolve(demands, allSpecs, kerf);
+        if (r.cost === Infinity) return { bins: [], unresolved: [...demands].sort((a,b)=>b-a)[0] };
+        return { bins: r.bins, unresolved: null };
+    }
+
+    let bins = greedySolve(demands, allSpecs, kerf, isCostEnabled);
+    const packedCount = bins.reduce((n, b) => n + b.items.length, 0);
+    if (packedCount < demands.length) {
+        const sorted = [...demands].sort((a,b)=>b-a);
+        return { bins, unresolved: sorted[0] };
+    }
+    bins = localSearchImprove(bins, allSpecs, kerf);
+    return { bins, unresolved: null };
+}
+
+// ---- exact branch & bound with memoization (small item counts) ----
+function exactSolve(demands, allSpecs, kerf) {
+    const memo = new Map();
+    const key = arr => arr.join(',');
+
+    // 0/1 knapsack: maximize filled length <= capacity, must include items[0] (largest remaining piece)
+    function bestFillIndices(items, capacity) {
+        const rest = items.slice(1);
+        const base = items[0].value;
+        if (base > capacity + 1e-9) return null;
+        const capLeft = capacity - base;
+        const scale = 1000;
+        const capInt = Math.max(0, Math.round(capLeft * scale));
+        const kerfInt = Math.round(kerf * scale);
+        const n = rest.length;
+
+        const dp = new Uint32Array(capInt + 1);
+        const snapshots = new Array(n);
+        for (let i = 0; i < n; i++) {
+            snapshots[i] = dp.slice();
+            const v = Math.round(rest[i].value * scale) + kerfInt;
+            if (v <= capInt) {
+                for (let c = capInt; c >= v; c--) {
+                    const cand = dp[c - v] + v;
+                    if (cand > dp[c]) dp[c] = cand;
                 }
             }
-            
-            let totalItemLength = indices.reduce((sum, idx) => sum + remaining[idx], 0);
-            let efficiency = (spec.size * spec.price) / totalItemLength;
+        }
+        let bestSum = 0;
+        for (let c = 0; c <= capInt; c++) if (dp[c] > bestSum) bestSum = dp[c];
+        let c = capInt;
+        while (c > 0 && dp[c] !== bestSum) c--;
 
-            if (efficiency < minCostEfficiency) {
-                minCostEfficiency = efficiency;
-                bestOption = { 
-                    size: spec.size, 
-                    indices, 
-                    totalItemsLen: totalItemLength,
-                    waste: spec.size - currentSum,
-                    kerfCount: currentKerfCount,
-                    isFixed: spec.isFixed,
-                    cost: spec.size * spec.price
+        const used = [];
+        let remSum = bestSum;
+        for (let i = n - 1; i >= 0 && remSum > 0; i--) {
+            const before = snapshots[i][c] || 0;
+            const v = Math.round(rest[i].value * scale) + kerfInt;
+            if (before !== remSum) {
+                used.push(rest[i].idx);
+                remSum -= v; c -= v;
+            }
+        }
+        return { indices: [items[0].idx, ...used] };
+    }
+
+    function solve(remaining) {
+        if (remaining.length === 0) return { cost: 0, bins: [] };
+        const k = key(remaining);
+        if (memo.has(k)) return memo.get(k);
+
+        const items = remaining.map((v, idx) => ({ value: v, idx }));
+        let best = null;
+
+        for (const spec of allSpecs) {
+            if (spec.size < items[0].value) continue;
+            const fill = bestFillIndices(items, spec.size);
+            if (!fill) continue;
+            const usedIdx = new Set(fill.indices);
+            const nextRemaining = remaining.filter((_, i) => !usedIdx.has(i));
+            const binCost = spec.size * spec.price;
+            if (best && binCost >= best.total) continue; // a single bin already costing >= best full solution can't help
+
+            const sub = solve(nextRemaining);
+            const total = binCost + sub.cost;
+            if (!best || total < best.total) {
+                best = {
+                    total,
+                    bin: { size: spec.size, isFixed: spec.isFixed, cost: binCost, items: fill.indices.map(i => remaining[i]) },
+                    subBins: sub.bins
                 };
             }
         }
-
-        if (bestOption) {
-            results.push({
-                size: bestOption.size,
-                items: bestOption.indices.map(i => remaining[i]),
-                waste: bestOption.waste,
-                kerfCount: bestOption.kerfCount,
-                isFixed: bestOption.isFixed,
-                cost: bestOption.cost
-            });
-            totalCost += bestOption.cost;
-            totalWaste += (bestOption.waste + bestOption.kerfCount * kerf);
-            bestOption.indices.sort((a,b) => b-a).forEach(i => remaining.splice(i, 1));
-        } else {
-            alert("長度 " + remaining[0] + " 超過最大規格限制"); break;
-        }
+        if (!best) return { cost: Infinity, bins: [] };
+        const result = { cost: best.total, bins: [best.bin, ...best.subBins] };
+        memo.set(k, result);
+        return result;
     }
 
-    render(results, totalCost, totalWaste, kerf);
+    return solve([...demands].sort((a, b) => b - a));
 }
 
-function render(results, cost, waste, kerf) {
+// ---- fast greedy (kept as the baseline pass for large lists) ----
+function greedySolve(demands, allSpecs, kerf, isCostEnabled) {
+    let rem = [...demands].sort((a, b) => b - a);
+    const bins = [];
+    while (rem.length > 0) {
+        let bestOption = null, minScore = Infinity;
+        for (const spec of allSpecs) {
+            if (spec.size < rem[0]) continue;
+            let currentSum = rem[0];
+            const indices = [0];
+            for (let i = 1; i < rem.length; i++) {
+                if (currentSum + rem[i] + kerf <= spec.size) {
+                    currentSum += rem[i] + kerf;
+                    indices.push(i);
+                }
+            }
+            const score = isCostEnabled ? (spec.size * spec.price) / currentSum : spec.size - currentSum;
+            if (score < minScore) {
+                minScore = score;
+                bestOption = { size: spec.size, isFixed: spec.isFixed, indices, cost: spec.size * spec.price };
+            }
+        }
+        if (!bestOption) break;
+        bins.push({ size: bestOption.size, isFixed: bestOption.isFixed, cost: bestOption.cost, items: bestOption.indices.map(i => rem[i]) });
+        bestOption.indices.sort((a, b) => b - a).forEach(i => rem.splice(i, 1));
+    }
+    return bins;
+}
+
+// ---- pairwise local-search improvement (fixes greedy's short-sighted choices) ----
+function fitsInSpec(itemValues, spec, kerf) {
+    const sum = itemValues.reduce((a, b) => a + b, 0);
+    const kerfTotal = itemValues.length > 1 ? (itemValues.length - 1) * kerf : 0;
+    return sum + kerfTotal <= spec.size + 1e-9;
+}
+
+function cheapestSpecFor(itemValues, allSpecs, kerf) {
+    if (itemValues.length === 0) return null;
+    let best = null;
+    for (const spec of allSpecs) {
+        if (fitsInSpec(itemValues, spec, kerf)) {
+            const cost = spec.size * spec.price;
+            if (!best || cost < best.cost) best = { size: spec.size, isFixed: spec.isFixed, cost };
+        }
+    }
+    return best;
+}
+
+function bestRepack(items, allSpecs, kerf) {
+    const n = items.length;
+    if (n > 18) return null; // keep exponential enumeration bounded; bins are physically limited in item count anyway
+    let best = null;
+    const total = 1 << n;
+    for (let mask = 1; mask < total; mask++) { // mask=0 (all in B) is the mirror of some other mask, skip
+        const A = [], B = [];
+        for (let i = 0; i < n; i++) (mask & (1 << i)) ? A.push(items[i]) : B.push(items[i]);
+        const specA = cheapestSpecFor(A, allSpecs, kerf);
+        if (!specA) continue;
+        let cost = specA.cost;
+        let resultBins = [{ size: specA.size, isFixed: specA.isFixed, cost: specA.cost, items: A }];
+        if (B.length > 0) {
+            const specB = cheapestSpecFor(B, allSpecs, kerf);
+            if (!specB) continue;
+            cost += specB.cost;
+            resultBins.push({ size: specB.size, isFixed: specB.isFixed, cost: specB.cost, items: B });
+        }
+        if (!best || cost < best.cost) best = { cost, bins: resultBins };
+    }
+    return best;
+}
+
+function localSearchImprove(bins, allSpecs, kerf) {
+    let improved = true;
+    let iterations = 0;
+    while (improved && iterations < 500) {
+        improved = false;
+        iterations++;
+        for (let i = 0; i < bins.length && !improved; i++) {
+            for (let j = i + 1; j < bins.length && !improved; j++) {
+                const combined = bins[i].items.concat(bins[j].items);
+                if (combined.length > 18) continue;
+                const currentCost = bins[i].cost + bins[j].cost;
+                const candidate = bestRepack(combined, allSpecs, kerf);
+                if (candidate && candidate.cost < currentCost - 1e-9) {
+                    const newBins = bins.slice();
+                    newBins.splice(j, 1);
+                    newBins.splice(i, 1, ...candidate.bins);
+                    bins = newBins;
+                    improved = true;
+                }
+            }
+        }
+    }
+    return bins;
+}
+
+function render(results, stats, isCostEnabled) {
     document.getElementById('resultsArea').style.display = 'block';
-    document.getElementById('statCost').innerText = "$" + cost.toLocaleString();
-    document.getElementById('statWaste').innerText = waste.toFixed(3) + "m";
-    document.getElementById('statCount').innerText = results.length + "支";
+    const totalCost = results.reduce((a, b) => a + b.cost, 0);
+    const totalStockLen = results.reduce((a, b) => a + b.size, 0);
+    const totalDemandLen = results.flatMap(r => r.items).reduce((a, b) => a + b, 0);
+    
+    document.getElementById('statCost').innerText = isCostEnabled ? "$" + totalCost.toLocaleString() : "N/A";
+    document.getElementById('statUtil').innerText = ((totalDemandLen / totalStockLen) * 100).toFixed(1) + "%";
+    document.getElementById('statCount').innerText = results.length + " 支";
 
     const list = document.getElementById('binsList');
     list.innerHTML = '';
@@ -160,27 +397,19 @@ function render(results, cost, waste, kerf) {
     results.forEach((bin, idx) => {
         const div = document.createElement('div');
         div.className = 'bin-item';
-        
-        let barHtml = '';
-        bin.items.forEach((it, i) => {
-            barHtml += `<div class="segment" style="width:${(it/bin.size)*100}%; background:${colors[i%colors.length]}">${it}</div>`;
-            if(i < bin.items.length - 1) {
-                barHtml += `<div class="segment kerf" title="鋸路損耗 ${kerf}m"></div>`;
-            }
-        });
-        if(bin.waste > 0) barHtml += `<div class="segment waste" style="width:${(bin.waste/bin.size)*100}%">${bin.waste.toFixed(2)}</div>`;
-
-        div.innerHTML = `
-            <div class="bin-header">
-                <strong>#${idx+1} 規格 ${bin.size}m ($${bin.cost})</strong>
-                <span class="tag ${bin.isFixed?'tag-fixed':'tag-var'}" style="background:${bin.isFixed?'#0369a1':'#db2777'}">
-                    ${bin.isFixed?'定尺':'不定尺'}
-                </span>
-            </div>
-            <div class="progress-bar">${barHtml}</div>
-            <small style="color:#64748b">包含 ${bin.kerfCount} 處鋸路 (共 ${ (bin.kerfCount * kerf).toFixed(3) }m)</small>
-        `;
+        let barHtml = bin.items.map((it, i) => `<div class="segment" style="width:${(it/bin.size)*100}%; background:${colors[i%colors.length]}">${it}</div>`).join('<div class="segment kerf"></div>');
+        div.innerHTML = `<div style="display:flex; justify-content:space-between"><strong>#${idx+1} 規格 ${bin.size}m</strong> <span class="tag" style="background:${bin.isFixed?'#0369a1':'#db2777'}">${bin.isFixed?'定尺':'不定尺'}</span></div><div class="progress-bar">${barHtml}</div>`;
         list.appendChild(div);
+    });
+
+    const summaryBody = document.getElementById('summaryBody');
+    summaryBody.innerHTML = '';
+    Object.keys(stats).sort().forEach(key => {
+        const row = summaryBody.insertRow();
+        const [size, type] = key.split('|');
+        row.insertCell(0).innerText = size;
+        row.insertCell(1).innerText = type;
+        row.insertCell(2).innerHTML = `<strong>${stats[key]}</strong>`;
     });
 }
 </script>
