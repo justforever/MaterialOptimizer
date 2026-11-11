@@ -119,6 +119,10 @@ function render(result, isCostEnabled, kerf) {
         return a + b.items.reduce(function (x, y) { return x + y; }, 0);
     }, 0);
     var totalWaste = bins.reduce(function (a, b) { return a + b.waste; }, 0);
+    var wasteFixed = bins.reduce(function (a, b) { return a + (b.isFixed ? b.waste : 0); }, 0);
+    var wasteVar = bins.reduce(function (a, b) { return a + (b.isFixed ? 0 : b.waste); }, 0);
+    var countFixed = bins.filter(function (b) { return b.isFixed; }).length;
+    var countVar = bins.length - countFixed;
 
     document.getElementById('statCost').textContent = isCostEnabled
         ? '$' + totalCost.toLocaleString(undefined, { maximumFractionDigits: 2 })
@@ -128,6 +132,10 @@ function render(result, isCostEnabled, kerf) {
         : '—';
     document.getElementById('statWaste').textContent = fmt(totalWaste) + ' m';
     document.getElementById('statCount').textContent = bins.length + ' 支';
+    document.getElementById('statWasteFixed').textContent = countFixed
+        ? fmt(wasteFixed) + ' m' : '—';
+    document.getElementById('statWasteVar').textContent = countVar
+        ? fmt(wasteVar) + ' m' : '—';
 
     var list = document.getElementById('binsList');
     list.innerHTML = '';
@@ -185,10 +193,14 @@ function render(result, isCostEnabled, kerf) {
         list.appendChild(div);
     });
 
+    // 依「規格 + 類別」彙總支數與餘料
     var stats = {};
     bins.forEach(function (bin) {
         var key = fmt(bin.size) + 'm|' + (bin.isFixed ? '定尺' : '不定尺');
-        stats[key] = (stats[key] || 0) + 1;
+        var s = stats[key] || (stats[key] = { count: 0, waste: 0, maxWaste: 0 });
+        s.count += 1;
+        s.waste += bin.waste;
+        if (bin.waste > s.maxWaste) s.maxWaste = bin.waste;
     });
 
     var summaryBody = document.getElementById('summaryBody');
@@ -196,11 +208,14 @@ function render(result, isCostEnabled, kerf) {
     Object.keys(stats).sort(function (a, b) { return parseFloat(a) - parseFloat(b); }).forEach(function (key) {
         var row = summaryBody.insertRow();
         var parts = key.split('|');
+        var s = stats[key];
         row.insertCell(0).textContent = parts[0];
         row.insertCell(1).textContent = parts[1];
         var cell = row.insertCell(2);
         var strong = document.createElement('strong');
-        strong.textContent = stats[key];
+        strong.textContent = s.count;
         cell.appendChild(strong);
+        row.insertCell(3).textContent = fmt(s.waste);
+        row.insertCell(4).textContent = fmt(s.maxWaste);
     });
 }

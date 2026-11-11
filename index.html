@@ -50,9 +50,9 @@
         .message.warn { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
         .message.info { background: #e0f2fe; color: #075985; border: 1px solid #bae6fd; }
 
-        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 25px; }
-        .stat-card { background: white; padding: 15px; border: 1px solid #e2e8f0; border-radius: 10px; text-align: center; font-size: 0.9em; }
-        .stat-value { font-size: 22px; font-weight: 800; color: var(--primary); display: block; margin-top: 6px; }
+        .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 12px; margin-bottom: 25px; }
+        .stat-card { background: white; padding: 14px 10px; border: 1px solid #e2e8f0; border-radius: 10px; text-align: center; font-size: 0.85em; }
+        .stat-value { font-size: 20px; font-weight: 800; color: var(--primary); display: block; margin-top: 6px; }
 
         .summary-table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
         .summary-table th { background: var(--primary); color: white; padding: 12px; text-align: left; }
@@ -116,8 +116,10 @@
         <div class="stat-grid">
             <div class="stat-card">預估總成本<span class="stat-value" id="statCost">N/A</span></div>
             <div class="stat-card">材料利用率<span class="stat-value" id="statUtil">0%</span></div>
-            <div class="stat-card">總廢料長度<span class="stat-value" id="statWaste">0 m</span></div>
+            <div class="stat-card">總餘料長度<span class="stat-value" id="statWaste">0 m</span></div>
             <div class="stat-card">總支數<span class="stat-value" id="statCount">0</span></div>
+            <div class="stat-card">🔵 定尺餘料<span class="stat-value" id="statWasteFixed">0 m</span></div>
+            <div class="stat-card">💗 不定尺餘料<span class="stat-value" id="statWasteVar">0 m</span></div>
         </div>
 
         <div id="binsList"></div>
@@ -129,6 +131,8 @@
                     <th>材料規格</th>
                     <th>類別</th>
                     <th>需要支數</th>
+                    <th>餘料合計 (m)</th>
+                    <th>最長單支餘料 (m)</th>
                 </tr>
             </thead>
             <tbody id="summaryBody"></tbody>
